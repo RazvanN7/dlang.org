@@ -566,7 +566,86 @@ $(GNAME Postblit):
         }
         ---
 
+        $(P There are situations in which a struct does not a define a postblit,
+        but the compiler generates one : if the members of the struct are themselves
+        structs that define postblits, then a field postblit is created which
+        calls all the underlying postblits:)
+        
+        ---
+        struct S { this(this) {} }
+        struct B { S a; }
+
+        void main()
+        {
+            // S has a defined postblit and a generated one
+            static assert((__traits(hasMember, S, "__xpostblit")));
+            static assert((__traits(hasMember, S, "__postblit")));
+            
+            // B does not have a defined postblit, but has a generated one
+            static assert(!(__traits(hasMember, B, "__postblit")));
+            static assert((__traits(hasMember, B, "__xpostblit")));
+        }
+        ---
+        
+        $(P Postblits are not overloadable.)
+        $(P Although the parser accepts qualifiers for postblits, in reality
+        the postblit was designed to work without qualifiers. For example,
+        defining a shared/immutable postblit will make it impossible for
+        that postblit to be called; calling a const postblit will work only
+        because an object can be implicitly converted from mutable to const,
+        however, the postblit will not be able to modify any of the data
+        contained in the newly copied struct:)
+        
+        ---
+        struct S
+        {
+            this(this) immutable
+            { }
+        }
+        
+        struct U
+        {
+            int n;
+            this(this) const
+            {
+                ++n;       // Error: cannot modify this.n in const function
+            }
+        }
+
+        void main()
+        {
+            S a;
+            auto a2 = a;   // Error: immutable method test.S.__postblit is not callable using a mutable object
+            immutable S a3;
+            auto a4 = a3;  // Error: immutable method test.S.__postblit is not callable using a mutable object
+            
+            U u;
+            auto u2 = u;
+        }
+        ---
+        
+        $(P Note that an unqualified postblit will get called even if the
+        struct is instantiated as immutable:)
+        
+        ---
+        struct S
+        {
+            int n;
+            this(this) { ++n; }
+        }
+        
+        void main()
+        {
+            immutable S a;
+            auto a2 = a;
+            import std.stdio: writeln;
+            writeln(a2.n);     // prints 1
+        }
+        ---
+        
         $(P Unions may not have fields that have postblits.)
+        $(P There is ongoing work to implement a copy-constructor similar
+        to the one in C++ and to deprecate the use of postblit.)
 
 $(H2 $(LEGACY_LNAME2 StructDestructor, struct-destructor, Struct Destructors))
 
